@@ -16,7 +16,18 @@ abort:
 	@echo Variable NAME not set && false
 endif
 
-DB=$(NAME)_osm
+ifeq ($(DB_USER),)
+abort:
+	@echo Variable DB_USER not set && false
+endif
+
+ifeq ($(DB_PASS),)
+abort:
+	@echo Variable DB_PASS not set && false
+endif
+
+
+DB=osm_$(NAME)
 SETNAME=$(NAME)
 
 mk-work-dir:
@@ -142,18 +153,18 @@ POSTGIS_EXPORTS = $(SQL_EXPORTS:.sql=.postgis)
 	ogr2ogr -f PGDump $(NAME)/$@ $(NAME)/$< -lco COLUMN_TYPES=other_tags=hstore --config OSM_CONFIG_FILE conf/$(basename $@).ini
 
 %.postgis: %.sql
-	psql -f $(NAME)/$< $(DB)
-	psql -f conf/$(basename $@)_alter.sql $(DB)
-	psql -f conf/clean.sql -q $(DB)
+	PGPASSWORD=$(DB_PASS) psql -U $(DB_USER) -f $(NAME)/$< $(DB)
+	PGPASSWORD=$(DB_PASS) psql -U $(DB_USER) -f conf/$(basename $@)_alter.sql $(DB)
+	PGPASSWORD=$(DB_PASS) psql -U $(DB_USER) -f conf/clean.sql -q $(DB)
 
 .PHONY: createdb
 createdb:
-	if psql -lqt | cut -d \| -f 1 | grep -w $(DB); then \
+	if PGPASSWORD=$(DB_PASS) psql -U $(DB_USER) -lqt | cut -d \| -f 1 | grep -w $(DB); then \
 		echo "Database exists"; \
 	else \
 		createdb $(DB); \
-		psql -d $(DB) -c 'create extension postgis;'; \
-		psql -d $(DB) -c 'create extension hstore;'; \
+		PGPASSWORD=$(DB_PASS) psql -U $(DB_USER) -d $(DB) -c 'create extension postgis;'; \
+		PGPASSWORD=$(DB_PASS) psql -U $(DB_USER) -d $(DB) -c 'create extension hstore;'; \
 	fi
 
 all: createdb $(PBF_EXPORTS) $(SQL_EXPORTS) $(POSTGIS_EXPORTS)
@@ -164,6 +175,6 @@ postgis: $(POSTGIS_EXPORTS)
 clean:
 	rm -rf $(NAME)/*.pbf
 	rm -rf $(NAME)/*.sql
-	if psql -lqt | cut -d \| -f 1 | grep -w $(DB); then \
-		psql -f conf/clean.sql -q $(DB); \
+	if PGPASSWORD=$(DB_PASS) psql -U $(DB_USER) -lqt | cut -d \| -f 1 | grep -w $(DB); then \
+		PGPASSWORD=$(DB_PASS) psql -U $(DB_USER) -f conf/clean.sql -q $(DB); \
 	fi
