@@ -26,6 +26,11 @@ abort:
 	@echo Variable DB_PASS not set && false
 endif
 
+ifeq ($(VENV_PATH),)
+abort:
+	@echo Variable VENV_PATH not set && false
+endif
+
 
 DB=osm_$(NAME)
 SETNAME=$(NAME)
@@ -139,23 +144,17 @@ utilities.pbf: latest.pbf
 villages.pbf: all_places.pbf
 	osmosis --read-pbf-fast file="$(NAME)/$<"  --tf accept-nodes "place=village" --tf reject-ways --tf reject-relations --write-pbf file="$(NAME)/$@"
 
-SQL_EXPORTS = aerodromes_point.sql aerodromes_polygon.sql all_places.sql \
-all_roads.sql banks.sql buildings.sql built_up_areas.sql cities.sql farms.sql \
-forest.sql grassland.sql helipads.sql hotels.sql inland_water_line.sql \
-inland_water_polygon.sql main_roads.sql medical_point.sql medical_polygon.sql \
-paths.sql police_stations.sql railways.sql schools_point.sql schools_polygon.sql \
-towns.sql tracks.sql transport_point.sql utilities.sql villages.sql
+SHP_EXPORTS = aerodromes_point.shp aerodromes_polygon.shp all_places.shp \
+all_roads.shp banks.shp buildings.shp built_up_areas.shp cities.shp farms.shp \
+forest.shp grassland.shp helipads.shp hotels.shp inland_water_line.shp \
+inland_water_polygon.shp main_roads.shp medical_point.shp medical_polygon.shp \
+paths.shp police_stations.shp railways.shp schools_point.shp schools_polygon.shp \
+towns.shp tracks.shp transport_point.shp utilities.shp villages.shp
 
-PBF_EXPORTS = $(SQL_EXPORTS:.sql=.pbf)
-POSTGIS_EXPORTS = $(SQL_EXPORTS:.sql=.postgis)
+PBF_EXPORTS = $(SHP_EXPORTS:.shp=.pbf)
 
-%.sql: %.pbf
-	ogr2ogr -f PGDump $(NAME)/$@ $(NAME)/$< -lco COLUMN_TYPES=other_tags=hstore --config OSM_CONFIG_FILE conf/$(basename $@).ini
-
-%.postgis: %.sql
-	PGPASSWORD=$(DB_PASS) psql -U $(DB_USER) -f $(NAME)/$< $(DB)
-	PGPASSWORD=$(DB_PASS) psql -U $(DB_USER) -f conf/$(basename $@)_alter.sql $(DB)
-	PGPASSWORD=$(DB_PASS) psql -U $(DB_USER) -f conf/clean.sql -q $(DB)
+%.shp: %.pbf
+	ogr2ogr -f "ESRI Shapefile" $(NAME)/$@ $(NAME)/$< -lco COLUMN_TYPES=other_tags=hstore --config OSM_CONFIG_FILE conf/$(basename $@).ini
 
 .PHONY: createdb
 createdb:
@@ -167,14 +166,8 @@ createdb:
 		PGPASSWORD=$(DB_PASS) psql -U $(DB_USER) -d $(DB) -c 'create extension hstore;'; \
 	fi
 
-all: createdb $(PBF_EXPORTS) $(SQL_EXPORTS) $(POSTGIS_EXPORTS)
-
-postgis: $(POSTGIS_EXPORTS)
+all: createdb $(PBF_EXPORTS) $(SHP_EXPORTS)
 
 .PHONY: clean
 clean:
 	rm -rf $(NAME)/*.pbf
-	rm -rf $(NAME)/*.sql
-	if PGPASSWORD=$(DB_PASS) psql -U $(DB_USER) -lqt | cut -d \| -f 1 | grep -w $(DB); then \
-		PGPASSWORD=$(DB_PASS) psql -U $(DB_USER) -f conf/clean.sql -q $(DB); \
-	fi
